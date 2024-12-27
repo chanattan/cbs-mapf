@@ -14,8 +14,9 @@ from copy import deepcopy
 import numpy as np
 
 # The low level planner for CBS is the Space-Time A* planner
-# https://github.com/GavinPHR/Space-Time-AStar
-from stastar.planner import Planner as STPlanner
+from pathfinding.core.grid import Grid
+from pathfinding.finder.a_star import AStarFinder
+from pathfinding.core.diagonal_movement import DiagonalMovement
 
 from .constraint_tree import CTNode
 from .constraints import Constraints
@@ -29,6 +30,27 @@ class Planner:
 
         self.robot_radius = robot_radius
         self.st_planner = STPlanner(grid_size, robot_radius, static_obstacles)
+    
+    def __init__(self, grid: List[List[int]]):
+        '''
+            In this version, the grid already contains the static obstacles (1).
+            The agents have their starter position (2),
+            and the goals (3) are assigned with a farthest-goal algorithm.
+        '''
+        def transform_grid(card):
+            """
+                Short utility function to only consider free (1) and obstacles (0) in the map.
+                Used to collaborate with the pathfinding library.
+            """
+            for y in range(len(card)):
+                for x in range(len(card[y])):
+                    obj = card[y][x]
+                    if obj == 2: # Obstacle: 2 -> 0
+                        card[y][x] = 0
+                    else: # Anything else is an agent: x -> 1
+                        card[y][x] = 1
+        transform_grid(grid)
+        self.grid = grid
 
     '''
     You can use your own assignment function, the default algorithm greedily assigns
@@ -38,11 +60,9 @@ class Planner:
                    goals: List[Tuple[int, int]],
                    assign:Callable = min_cost,
                    max_iter:int = 200,
-                   low_level_max_iter:int = 100,
                    max_process:int = 10,
                    debug:bool = False) -> np.ndarray:
 
-        self.low_level_max_iter = low_level_max_iter
         self.debug = debug
 
         # Do goal assignment
@@ -51,7 +71,7 @@ class Planner:
         constraints = Constraints()
 
         # Compute path for each agent using low level planner
-        solution = dict((agent, self.calculate_path(agent, constraints, None)) for agent in self.agents)
+        solution = dict((agent, self.calculate_path(agent, constraints)) for agent in self.agents)
 
         open = []
         if all(len(path) != 0 for path in solution.values()):
@@ -109,11 +129,9 @@ class Planner:
 
         # Calculate new paths
         agent_i_path = self.calculate_path(agent_i,
-                                           agent_i_constraint,
-                                           self.calculate_goal_times(best, agent_i, self.agents))
+                                           agent_i_constraint)
         agent_j_path = self.calculate_path(agent_j,
-                                           agent_j_constraint,
-                                           self.calculate_goal_times(best, agent_j, self.agents))
+                                           agent_j_constraint)
 
         # Replace old paths with new ones in solution
         solution_i = best.solution
@@ -184,17 +202,36 @@ class Planner:
         return goal_times
 
     '''
+        Add constraints to the grid, physically.
+    '''
+    def translate_constraints(self, constraints: Dict[int, Set[Tuple[int, int]]], grid):
+        '''
+            The modeled constraints in CBS are time-based. In this translation, conflicts
+            are considered as virtual static obstacles present on the grid.
+            In some sort, there is a projection of time to a fixed time.
+        '''
+        v_grid = deepcopy(grid)
+        for s in constraints.values():
+            for (x, y) in s:
+                v_grid[y][x] = 1 # Obstacle
+        return v_grid
+
+    '''
     Calculate the paths for all agents with space-time constraints
     '''
     def calculate_path(self, agent: Agent, 
-                       constraints: Constraints, 
-                       goal_times: Dict[int, Set[Tuple[int, int]]]) -> np.ndarray:
-        return self.st_planner.plan(agent.start, 
-                                    agent.goal, 
-                                    constraints.setdefault(agent, dict()), 
-                                    semi_dynamic_obstacles=goal_times,
-                                    max_iter=self.low_level_max_iter, 
-                                    debug=self.debug)
+                       constraints: Constraints) -> np.ndarray:
+        finder = AStarFinder(diagonal_movement = DiagonalMovement.always)
+        path, runs = finder.find_path(agent.start,
+                                      agent.goal,
+                                      self.translate_constraints(constraints.setdefault(agent, dict()), self.grid))
+        return np.array(path) # np array of dimension (len(path), 2)
+        #return self.st_planner.plan(agent.start, 
+        #                            agent.goal, 
+        #                            constraints.setdefault(agent, dict()), 
+        #                            semi_dynamic_obstacles=goal_times,
+        #                            max_iter=self.low_level_max_iter, 
+        #                            debug=self.debug)
 
     '''
     Reformat the solution to a numpy array

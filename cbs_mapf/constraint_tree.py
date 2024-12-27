@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 '''
-Author: Haoran Peng
+Author: Chanattan Sok
+
+Original author: Haoran Peng
 Email: gavinsweden@gmail.com
 '''
 from typing import Dict
