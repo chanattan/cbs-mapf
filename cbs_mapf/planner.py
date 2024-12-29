@@ -24,13 +24,14 @@ from .agent import Agent
 from .assigner import *
 class Planner:
 
+    """
     def __init__(self, grid_size: int,
                        robot_radius: int,
                        static_obstacles: List[Tuple[int, int]]):
 
         self.robot_radius = robot_radius
         self.st_planner = STPlanner(grid_size, robot_radius, static_obstacles)
-    
+    """
     def __init__(self, grid: List[List[int]]):
         '''
             In this version, the grid already contains the static obstacles (1).
@@ -221,10 +222,21 @@ class Planner:
     '''
     def calculate_path(self, agent: Agent, 
                        constraints: Constraints) -> np.ndarray:
+        grid = Grid(height=len(self.grid),
+                    width=len(self.grid[0]),
+                    matrix = self.translate_constraints(constraints.setdefault(agent, dict()), self.grid),
+                    inverse=False, grid_id=1)
         finder = AStarFinder(diagonal_movement = DiagonalMovement.always)
-        path, runs = finder.find_path(agent.start,
-                                      agent.goal,
-                                      self.translate_constraints(constraints.setdefault(agent, dict()), self.grid))
+        ss = list(agent.start)
+        ee = list(agent.goal)
+        start = grid.node(ss[0], ss[1])
+        end = grid.node(ee[0], ee[1])
+        path, runs = finder.find_path(start,
+                                      end,
+                                      grid)
+        cell = lambda c : (c.x, c.y)
+        path = list(map(cell, path))
+        print("----- path", path, "\n")
         return np.array(path) # np array of dimension (len(path), 2)
         #return self.st_planner.plan(agent.start, 
         #                            agent.goal, 

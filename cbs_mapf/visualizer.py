@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import yaml
 
-from cbs_mapf.planner import Planner
+from .planner import Planner
 
 
 class Simulator:
@@ -25,9 +25,11 @@ class Simulator:
         static_obstacles = self.vertices_to_obsts(RECT_OBSTACLES)
 
         # Call cbs-mapf to plan
-        self.planner = Planner(GRID_SIZE, ROBOT_RADIUS, static_obstacles)
+        start = [(0, 0)]
+        goal = [(2, 2)]
+        self.planner = Planner([[1, 2, 2], [0, 2, 0], [0, 0, 3]])
         before = time.time()
-        self.path = self.planner.plan(START, GOAL, debug=False)
+        self.path = self.planner.plan(start, goal, debug=False)
         after = time.time()
         print('Time elapsed:', "{:.4f}".format(after-before), 'second(s)')
 
